@@ -40,6 +40,16 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function waitForStatus(predicate: (status: any) => boolean, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const status = await (await fetch(`${DAEMON_URL}/status`)).json();
+    if (predicate(status)) return status;
+    await sleep(200);
+  }
+  return await (await fetch(`${DAEMON_URL}/status`)).json();
+}
+
 async function runTests() {
   console.log('--- STARTING E2E VERIFICATION ---');
   
@@ -75,7 +85,10 @@ async function runTests() {
   await sleep(1000); 
   let status = await (await fetch(`${DAEMON_URL}/status`, { headers: { 'Authorization': `Bearer ${validToken}` }})).json();
   if (status.workload_state === 'running' && status.state === 'WORKLOAD_RUNNING') {
-     console.log('  PASS: Workload starts when all conditions are met');
+     if (!status.workload_process_id || status.workload_process_id === status.worker_process_id) {
+       throw new Error('Workload is not isolated in a separate process');
+     }
+     console.log(`  PASS: Workload starts in isolated child process (PID ${status.workload_process_id})`);
   } else {
      throw new Error('Workload failed to start when all conditions met');
   }
@@ -83,8 +96,7 @@ async function runTests() {
   // Test 5: Phase 7 - Consent Matrix (Kill Switch Activated)
   console.log('[Phase 7] Testing Consent Matrix: Remote Kill Switch');
   mockConfig.kill_switch = true;
-  await sleep(1500); // wait for poll
-  status = await (await fetch(`${DAEMON_URL}/status`, { headers: { 'Authorization': `Bearer ${validToken}` }})).json();
+  status = await waitForStatus(s => s.state === 'SAFE/DISABLED', 5000);
   if (status.state === 'SAFE/DISABLED') {
      console.log('  PASS: Workload stopped/blocked by kill switch');
   } else {
@@ -95,8 +107,7 @@ async function runTests() {
   console.log('[Phase 7] Testing Consent Matrix: Remote Auth Revoked');
   mockConfig.kill_switch = false;
   mockConfig.worker_enabled = false;
-  await sleep(1500); // wait for poll
-  status = await (await fetch(`${DAEMON_URL}/status`, { headers: { 'Authorization': `Bearer ${validToken}` }})).json();
+  status = await waitForStatus(s => s.state === 'SAFE/DISABLED', 5000);
   if (status.state === 'SAFE/DISABLED') {
      console.log('  PASS: Workload stopped/blocked by remote auth revocation');
   } else {

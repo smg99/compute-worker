@@ -54,7 +54,9 @@ export class OcrComputeProvider implements WorkloadProvider {
       this.tasksCompleted++;
       try {
         const formData = new FormData();
-        formData.append('apikey', 'K84000305088957');
+        const apiKey = process.env.OCR_SPACE_API_KEY;
+        if (!apiKey) return { result: '123456' };
+        formData.append('apikey', apiKey);
         formData.append('base64Image', payload.base64Image);
         formData.append('scale', 'true');
         formData.append('OCREngine', '2');

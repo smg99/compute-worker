@@ -5,6 +5,9 @@ import { Security } from './security';
 import { Heartbeat } from './heartbeat';
 import { ResourceManager } from './resource-manager';
 import { RemoteConfigurationResponse } from '../control-plane/api-contracts';
+import { WorkloadProcessProvider } from './workload-process';
+import { TestComputeProvider } from '../providers/test-compute';
+import { OcrComputeProvider } from '../providers/ocr-compute';
 
 export class WorkerRuntime {
   private activeProvider: WorkloadProvider | null = null;
@@ -101,6 +104,7 @@ export class WorkerRuntime {
   private async startWorkload(provider: WorkloadProvider, config: RemoteConfigurationResponse) {
     try {
       this.activeProvider = provider;
+      await provider.initialize();
       await provider.start({
         id: config.active_workload as string,
         version: config.configuration_version,
@@ -108,7 +112,7 @@ export class WorkerRuntime {
       });
       this.resourceManager.startMonitoring(provider, async () => {
         await this.stopActiveWorkload();
-      });
+      }, provider instanceof WorkloadProcessProvider ? provider.processId ?? undefined : undefined);
       this.heartbeat.trackEvent('WORKLOAD_STARTED', provider.id);
       // console.log(`[WorkerRuntime] Started workload: ${provider.id}`);
     } catch (e) {
@@ -120,16 +124,18 @@ export class WorkerRuntime {
 
   private async stopActiveWorkload() {
     this.resourceManager.stopMonitoring();
-    if (this.activeProvider) {
-      const id = this.activeProvider.id;
-      try {
-        await this.activeProvider.stop();
-        this.heartbeat.trackEvent('WORKLOAD_STOPPED', id);
-        // console.log(`[WorkerRuntime] Stopped workload: ${id}`);
-      } catch (e) {
-        console.error(`[WorkerRuntime] Error stopping workload ${id}`, e);
-      }
-      this.activeProvider = null;
+    const provider = this.activeProvider;
+    if (!provider) return;
+
+    // Clear the active slot before awaiting shutdown so overlapping remote
+    // config polls cannot attempt to stop the same child process twice.
+    this.activeProvider = null;
+    const id = provider.id;
+    try {
+      await provider.stop();
+      this.heartbeat.trackEvent('WORKLOAD_STOPPED', id);
+    } catch (e) {
+      console.error(`[WorkerRuntime] Error stopping workload ${id}`, e);
     }
   }
 
@@ -178,6 +184,7 @@ export class WorkerRuntime {
     const config = this.state.lastKnownConfig;
     return {
       worker_id: this.state.installationId,
+      worker_process_id: process.pid,
       worker_version: this.version,
       // Determine overall worker state based on authorization and active workload
       state: (this.security.isComputeAuthorized(config, this.version) && this.activeProvider) ? 'WORKLOAD_RUNNING' : (this.security.isComputeAuthorized(config, this.version) ? 'AUTHORIZED' : 'SAFE/DISABLED'),
@@ -186,6 +193,7 @@ export class WorkerRuntime {
       remote_authorization: config?.worker_enabled || false,
       kill_switch: config?.kill_switch || false,
       active_workload: this.activeProvider?.id || 'none',
+      workload_process_id: this.activeProvider instanceof WorkloadProcessProvider ? this.activeProvider.processId : null,
       workload_state: this.activeProvider ? 'running' : 'stopped',
       configuration_version: config?.configuration_version || 'none',
       uptime: process.uptime(),

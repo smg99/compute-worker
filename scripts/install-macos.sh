@@ -2,7 +2,7 @@
 # macOS Installer Script for Compute Worker
 #
 # Downloads the pre-built `worker.js` from the published GitHub release asset
-# for v0.1.0. Does NOT require the user to have the repository cloned.
+# for v0.1.1. Does NOT require the user to have the repository cloned.
 # This script does NOT start compute automatically.
 
 set -e
@@ -10,9 +10,9 @@ set -e
 echo "Starting Compute Worker installation for macOS..."
 
 # Base URL for the pre-built release artifact (worker.js).
-# Points at the published GitHub release asset for v0.1.0.
+# Points at the published GitHub release asset for v0.1.1.
 # Override by exporting COMPUTE_WORKER_RELEASE_BASE_URL before running.
-COMPUTE_WORKER_RELEASE_BASE_URL="${COMPUTE_WORKER_RELEASE_BASE_URL:-https://github.com/smg99/compute-worker/releases/download/v0.1.0}"
+COMPUTE_WORKER_RELEASE_BASE_URL="${COMPUTE_WORKER_RELEASE_BASE_URL:-https://github.com/smg99/compute-worker/releases/download/v0.1.1}"
 WORKER_JS_URL="$COMPUTE_WORKER_RELEASE_BASE_URL/worker.js"
 
 # Ensure Node.js runtime is available (no sudo installation)

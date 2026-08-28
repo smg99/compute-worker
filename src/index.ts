@@ -6,6 +6,12 @@ import { WorkerState } from './core/worker-state';
 import { WorkerRuntime } from './core/worker-runtime';
 import { TestComputeProvider } from './providers/test-compute';
 import { OcrComputeProvider } from './providers/ocr-compute';
+import { runWorkloadChild } from './workload-child';
+import { WorkloadProcessProvider } from './core/workload-process';
+
+if (process.env.COMPUTE_WORKER_CHILD === '1') {
+  void runWorkloadChild();
+} else {
 
 const PORT = parseInt(process.env.WORKER_PORT || '34567', 10);
 const STATE_DIR = process.env.WORKER_STATE_DIR || path.join(require('os').homedir(), '.compute-worker');
@@ -35,8 +41,8 @@ const runtime = new WorkerRuntime(
 );
 
 // 3. Register Providers
-runtime.registerProvider(new TestComputeProvider());
-runtime.registerProvider(new OcrComputeProvider());
+runtime.registerProvider(new WorkloadProcessProvider('test-compute', new TestComputeProvider()));
+runtime.registerProvider(new WorkloadProcessProvider('ocr-compute', new OcrComputeProvider()));
 
 // 4. Start Worker
 runtime.start();
@@ -185,3 +191,4 @@ process.on('uncaughtException', async (err) => {
   server.close();
   process.exit(1);
 });
+}

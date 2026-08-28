@@ -10,7 +10,7 @@ set -e
 # Users can export this variable before running the installer to point
 # to a custom location, e.g.:
 #   export COMPUTE_WORKER_RELEASE_BASE_URL="https://github.com/owner/compute-worker/releases/download/v1.0.0"
-COMPUTE_WORKER_RELEASE_BASE_URL="${COMPUTE_WORKER_RELEASE_BASE_URL:-https://github.com/smg99/compute-worker/releases/download/v0.1.0}"
+COMPUTE_WORKER_RELEASE_BASE_URL="${COMPUTE_WORKER_RELEASE_BASE_URL:-https://github.com/smg99/compute-worker/releases/download/v0.1.1}"
 if [[ -z "$COMPUTE_WORKER_RELEASE_BASE_URL" ]]; then
   echo "Error: COMPUTE_WORKER_RELEASE_BASE_URL is not set."
   echo "Set it to the base URL that hosts a pre‑built 'worker.js' file before running the installer."

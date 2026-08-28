@@ -40,6 +40,7 @@ export class ResourceManager {
   private provider: WorkloadProvider | null = null;
   private onResourceViolation: (() => Promise<void>) | null = null;
   private pausedForCpu = false;
+  private monitoredPid = process.pid;
   private lastUsage: ResourceUsage = { cpu_percent: 0, memory_mb: 0 };
   private _status: ResourceManagerStatus = 'INACTIVE';
 
@@ -148,7 +149,7 @@ export class ResourceManager {
   }
 
   private async readUsage(): Promise<ResourceUsage> {
-    const { stdout } = await execFileAsync('ps', ['-p', String(process.pid), '-o', '%cpu=,rss=']);
+    const { stdout } = await execFileAsync('ps', ['-p', String(this.monitoredPid), '-o', '%cpu=,rss=']);
     const values = stdout.trim().split(/\s+/).map(Number);
     if (values.length < 2 || values.some((value) => !Number.isFinite(value))) {
       throw new Error(`Unexpected ps output: ${stdout.trim()}`);
