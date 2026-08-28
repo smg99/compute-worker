@@ -3,16 +3,24 @@
  */
 
 export interface ComputeWorkerStatus {
+  worker_id: string;
   worker_version: string;
+  state: string;
   consent: boolean;
-  compute_enabled: boolean;
+  compute_requested: boolean;
+  remote_authorization: boolean;
+  kill_switch: boolean;
   active_workload: string;
+  workload_state: string;
+  resource_manager_status: string;
 }
 
 export class ComputeWorkerClient {
-  private apiUrl = 'http://127.0.0.1:34567';
+  private readonly apiUrl: string;
 
-  constructor(public readonly productId: string, private authToken: string) {}
+  constructor(public readonly productId: string, private authToken: string, apiUrl = 'http://127.0.0.1:34567') {
+    this.apiUrl = apiUrl.replace(/\/$/, '');
+  }
 
   private get headers() {
     return {

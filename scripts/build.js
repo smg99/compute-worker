@@ -1,6 +1,7 @@
 const esbuild = require('esbuild');
 const path = require('path');
 const fs = require('fs');
+const pkg = require('../package.json');
 
 async function build() {
   const dist = path.join(__dirname, '..', 'dist');
@@ -14,6 +15,7 @@ async function build() {
     target: 'node20',
     outfile: 'dist/worker.js',
     minify: true,
+    define: { 'process.env.WORKER_VERSION': JSON.stringify(pkg.version) },
     external: ['fsevents'] // Ignore optional dependencies
   });
   console.log('Built dist/worker.js');

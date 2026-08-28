@@ -1,35 +1,39 @@
-#!/bin/bash
-# Linux Installer Script for Compute Worker
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+RELEASE_VERSION="${COMPUTE_WORKER_RELEASE_VERSION:-v0.2.0}"
+BASE_URL="${COMPUTE_WORKER_RELEASE_BASE_URL:-https://github.com/smg99/compute-worker/releases/download/${RELEASE_VERSION}}"
+CONTROL_PLANE_URL="${COMPUTE_WORKER_CONTROL_PLANE_URL:-}"
+ARCH="$(uname -m)"
+case "$ARCH" in
+  x86_64) ARTIFACT="compute-worker-linux-x64" ;;
+  aarch64|arm64) ARTIFACT="compute-worker-linux-arm64" ;;
+  *) echo "Unsupported Linux architecture: $ARCH"; exit 1 ;;
+esac
+if [[ -z "$CONTROL_PLANE_URL" ]]; then echo "Error: COMPUTE_WORKER_CONTROL_PLANE_URL is required."; exit 1; fi
+WORKER_DIR="$HOME/.compute-worker"
+mkdir -p "$WORKER_DIR" "$HOME/.config/systemd/user"
+AUTH_FILE="$WORKER_DIR/auth.key"
+if [[ ! -f "$AUTH_FILE" ]]; then openssl rand -hex 32 > "$AUTH_FILE"; fi
+chmod 600 "$AUTH_FILE"
+curl -fL --retry 3 "$BASE_URL/$ARTIFACT" -o "$WORKER_DIR/worker.tmp"
+chmod 755 "$WORKER_DIR/worker.tmp"
+mv "$WORKER_DIR/worker.tmp" "$WORKER_DIR/compute-worker"
+cat > "$HOME/.config/systemd/user/compute-worker.service" <<EOF
+[Unit]
+Description=Compute Worker
+After=network-online.target
 
-echo "Starting Compute Worker installation for Linux..."
+[Service]
+ExecStart=$WORKER_DIR/compute-worker
+Environment=CONTROL_PLANE_URL=$CONTROL_PLANE_URL
+Environment=WORKER_STATE_DIR=$WORKER_DIR
+Restart=always
+RestartSec=5
 
-# 1. Download binary (placeholder)
-# curl -LO https://cdn.example.com/worker/latest/compute-worker-linux-amd64
-# chmod +x compute-worker-linux-amd64
-# sudo mv compute-worker-linux-amd64 /usr/local/bin/compute-worker
-
-# 2. Setup Systemd Service
-SERVICE_PATH="/etc/systemd/system/compute-worker.service"
-
-# sudo bash -c "cat << EOF > $SERVICE_PATH
-# [Unit]
-# Description=Compute Worker Service
-# After=network.target
-
-# [Service]
-# ExecStart=/usr/local/bin/compute-worker
-# Restart=always
-# User=$USER
-# Environment=NODE_ENV=production
-
-# [Install]
-# WantedBy=multi-user.target
-# EOF"
-
-# sudo systemctl daemon-reload
-# sudo systemctl enable compute-worker
-# sudo systemctl start compute-worker
-
-echo "Installation complete."
+[Install]
+WantedBy=default.target
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now compute-worker.service
+echo "Installed $ARTIFACT to $WORKER_DIR/compute-worker."

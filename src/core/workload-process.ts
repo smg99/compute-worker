@@ -1,5 +1,6 @@
 import { ChildProcess, fork } from 'child_process';
 import * as path from 'path';
+import * as sea from 'node:sea';
 import { WorkloadConfiguration, WorkloadMetrics, WorkloadProvider } from './workload-provider';
 
 type RpcRequest = { id: number; method: string; args?: any[] };
@@ -73,7 +74,14 @@ export class WorkloadProcessProvider implements WorkloadProvider {
   private async ensureChild(): Promise<void> {
     if (this.child && !this.child.killed) return;
     const workerScript = path.resolve(process.argv[1]);
-    const child = fork(workerScript, [], {
+    // SEA binaries have no external JS entrypoint. Re-launch the executable itself;
+    // the embedded entrypoint sees COMPUTE_WORKER_CHILD and enters workload-child mode.
+    const child = sea.isSea()
+      ? fork(process.execPath, [], {
+          env: { ...process.env, COMPUTE_WORKER_CHILD: '1', COMPUTE_WORKLOAD_ID: this.id },
+          stdio: ['ignore', 'pipe', 'pipe', 'ipc']
+        })
+      : fork(workerScript, [], {
       env: { ...process.env, COMPUTE_WORKER_CHILD: '1', COMPUTE_WORKLOAD_ID: this.id },
       stdio: ['ignore', 'pipe', 'pipe', 'ipc']
     });

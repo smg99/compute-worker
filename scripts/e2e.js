@@ -142,7 +142,7 @@ async function runTests() {
 }
 controlPlane.listen(CONTROL_PLANE_PORT, "127.0.0.1", () => {
   const worker = (0, import_child_process.spawn)("node", ["dist/worker.js"], {
-    env: { ...process.env, CONTROL_PLANE_URL: "http://127.0.0.1:34568", WORKER_JWT_SECRET: "test-secret", POLL_INTERVAL_MS: "1000" }
+    env: { ...process.env, CONTROL_PLANE_URL: "http://127.0.0.1:34568", POLL_INTERVAL_MS: "1000" }
   });
   worker.stdout.on("data", (data) => console.log(`[DAEMON] ${data}`));
   worker.stderr.on("data", (data) => console.error(`[DAEMON] ${data}`));

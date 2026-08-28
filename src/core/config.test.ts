@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import jwt from 'jsonwebtoken';
 import { ConfigPoller } from './config';
 
-const JWT_SECRET = 'default_dev_secret_replace_in_prod';
+const JWT_SECRET = 'test-worker-token';
 
 function signedConfig(payload: Record<string, unknown>) {
   return jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256', expiresIn: '5m' });
@@ -24,6 +24,7 @@ describe('ConfigPoller', () => {
   const mockState = {
     installationId: 'test-installation-id',
     lastKnownConfig: null as unknown,
+    controlPlaneToken: JWT_SECRET,
     setLastKnownConfig: vi.fn(),
   };
   const onConfigUpdate = vi.fn();

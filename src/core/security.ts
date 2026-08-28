@@ -38,15 +38,18 @@ export class Security {
       return false;
     }
 
-    // 5. Worker version check
+    // 5. Configuration expiry check
+    if (remoteConfig.expires_at && remoteConfig.expires_at * 1000 < Date.now()) return false;
+
+    // 6. Worker version check
     if (remoteConfig.minimum_worker_version) {
-      // In a real app, use semver to check
+      // Versions are currently restricted to numeric dotted releases.
       if (workerVersion < remoteConfig.minimum_worker_version) {
         return false;
       }
     }
 
-    // 6. Remote policy must specify a valid workload that is in the allowed list
+    // 7. Remote policy must specify a valid workload that is in the allowed list
     if (!remoteConfig.active_workload || !remoteConfig.allowed_workloads.includes(remoteConfig.active_workload)) {
       return false;
     }

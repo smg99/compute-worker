@@ -22,9 +22,17 @@ let mockConfig = {
 // Mock Control Plane Server
 const controlPlane = http.createServer((req, res) => {
   if (req.method === 'POST' && req.url?.startsWith('/functions/v1/worker-config')) {
-     const token = jwt.sign(mockConfig, 'test-secret');
+     const auth = req.headers.authorization || '';
+     if (!auth) { res.writeHead(401); res.end(); return; }
+     const workerToken = auth.slice(7);
+     const token = jwt.sign(mockConfig, workerToken);
      res.writeHead(200, { 'Content-Type': 'application/json' });
      res.end(JSON.stringify({ token }));
+     return;
+  }
+  if (req.method === 'POST' && req.url?.startsWith('/functions/v1/worker-register')) {
+     res.writeHead(200, { 'Content-Type': 'application/json' });
+     res.end(JSON.stringify({ worker_token: 'e2e-worker-token', registered: true }));
      return;
   }
   if (req.method === 'POST' && req.url?.startsWith('/functions/v1/worker-telemetry')) {
@@ -171,8 +179,10 @@ async function runTests() {
 import { spawn } from 'child_process';
 
 controlPlane.listen(CONTROL_PLANE_PORT, '127.0.0.1', () => {
-   const worker = spawn('node', ['dist/worker.js'], {
-     env: { ...process.env, CONTROL_PLANE_URL: `http://127.0.0.1:${CONTROL_PLANE_PORT}`, WORKER_JWT_SECRET: 'test-secret', POLL_INTERVAL_MS: '1000', WORKER_PORT: WORKER_PORT }
+   const workerCommand = process.env.E2E_WORKER_COMMAND || 'node';
+   const workerArgs = process.env.E2E_WORKER_COMMAND ? [] : ['dist/worker.js'];
+   const worker = spawn(workerCommand, workerArgs, {
+     env: { ...process.env, CONTROL_PLANE_URL: `http://127.0.0.1:${CONTROL_PLANE_PORT}`, POLL_INTERVAL_MS: '1000', WORKER_PORT: WORKER_PORT }
    });
    
    worker.stdout.on('data', (data) => console.log(`[DAEMON] ${data}`));

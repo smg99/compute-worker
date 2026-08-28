@@ -1,0 +1,58 @@
+name: Release Compute Worker
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            artifact: compute-worker-darwin-arm64
+          - os: macos-13
+            artifact: compute-worker-darwin-x64
+          - os: ubuntu-24.04
+            artifact: compute-worker-linux-x64
+          - os: ubuntu-24.04-arm
+            artifact: compute-worker-linux-arm64
+          - os: windows-2025
+            artifact: compute-worker-win32-x64.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Build standalone
+        shell: bash
+        env:
+          SEA_OUTPUT: ${{ github.workspace }}/dist/${{ matrix.artifact }}
+        run: node scripts/build-standalone.js
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+      - name: Flatten release assets
+        run: find release -type f -exec cp {} release/ \; && find release -mindepth 1 -type d -empty -delete
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --title "Compute Worker $GITHUB_REF_NAME" --generate-notes

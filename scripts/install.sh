@@ -1,73 +1,87 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-# Compute Worker Installer (cross‑platform)
-# This script can be executed directly via:
-#   curl -fsSL https://example.com/install.sh | bash
+# Compute Worker one-command installer for macOS/Linux.
+# Example: curl -fsSL https://raw.githubusercontent.com/smg99/compute-worker/main/scripts/install.sh | bash
 
-# Base URL for pre‑built release artifacts. Must point to a location
-# that hosts a `worker.js` file.
-# Users can export this variable before running the installer to point
-# to a custom location, e.g.:
-#   export COMPUTE_WORKER_RELEASE_BASE_URL="https://github.com/owner/compute-worker/releases/download/v1.0.0"
-COMPUTE_WORKER_RELEASE_BASE_URL="${COMPUTE_WORKER_RELEASE_BASE_URL:-https://github.com/smg99/compute-worker/releases/download/v0.1.1}"
-if [[ -z "$COMPUTE_WORKER_RELEASE_BASE_URL" ]]; then
-  echo "Error: COMPUTE_WORKER_RELEASE_BASE_URL is not set."
-  echo "Set it to the base URL that hosts a pre‑built 'worker.js' file before running the installer."
-  exit 1
-fi
+RELEASE_VERSION="${COMPUTE_WORKER_RELEASE_VERSION:-v0.2.0}"
+BASE_URL="${COMPUTE_WORKER_RELEASE_BASE_URL:-https://github.com/smg99/compute-worker/releases/download/${RELEASE_VERSION}}"
+CONTROL_PLANE_URL="${COMPUTE_WORKER_CONTROL_PLANE_URL:-}"
 
-# Detect OS / architecture (currently supports macOS and Linux)
-OS=$(uname | tr '[:upper:]' '[:lower:]')
-case "$OS" in
-  darwin) PLATFORM="macos" ;;
-  linux)  PLATFORM="linux" ;;
-  *) echo "Unsupported platform: $OS"; exit 1 ;;
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+case "$OS:$ARCH" in
+  darwin:arm64) ARTIFACT="compute-worker-darwin-arm64" ;;
+  darwin:x86_64) ARTIFACT="compute-worker-darwin-x64" ;;
+  linux:x86_64) ARTIFACT="compute-worker-linux-x64" ;;
+  linux:aarch64|linux:arm64) ARTIFACT="compute-worker-linux-arm64" ;;
+  *) echo "Unsupported platform: $OS/$ARCH"; exit 1 ;;
 esac
 
-# Ensure Node.js runtime is available (no sudo installation)
-if ! command -v node >/dev/null 2>&1; then
-  echo "Error: Node.js is required but not found in PATH. Install Node manually and retry."
+if [[ -z "$CONTROL_PLANE_URL" ]]; then
+  echo "Error: COMPUTE_WORKER_CONTROL_PLANE_URL is required for production installation."
+  echo "Set it to the deployed Compute Worker control-plane base URL and retry."
   exit 1
 fi
 
-# Installation directory (per‑user)
 WORKER_DIR="$HOME/.compute-worker"
 mkdir -p "$WORKER_DIR"
-
-# Preserve existing auth.key or generate a new one
 AUTH_FILE="$WORKER_DIR/auth.key"
-if [[ -f "$AUTH_FILE" ]]; then
-  echo "Preserving existing auth key."
-else
-  if command -v uuidgen >/dev/null 2>&1; then
-    uuidgen > "$AUTH_FILE"
-  else
-    # fallback to openssl if uuidgen is missing
-    openssl rand -hex 16 > "$AUTH_FILE"
-  fi
-  echo "Generated new auth key at $AUTH_FILE"
+if [[ ! -f "$AUTH_FILE" ]]; then
+  if command -v uuidgen >/dev/null 2>&1; then uuidgen > "$AUTH_FILE"; else openssl rand -hex 32 > "$AUTH_FILE"; fi
 fi
 chmod 600 "$AUTH_FILE"
 
-# Download the pre‑built worker.js
-WORKER_JS_URL="$COMPUTE_WORKER_RELEASE_BASE_URL/worker.js"
-echo "Downloading worker.js from $WORKER_JS_URL ..."
-curl -fsSL "$WORKER_JS_URL" -o "$WORKER_DIR/worker.js"
-if [[ ! -s "$WORKER_DIR/worker.js" ]]; then
-  echo "Failed to download worker.js or file is empty."
-  exit 1
+TMP="$WORKER_DIR/worker.tmp"
+URL="$BASE_URL/$ARTIFACT"
+echo "Downloading $ARTIFACT from $URL ..."
+curl -fL --retry 3 --retry-delay 1 "$URL" -o "$TMP"
+chmod 755 "$TMP"
+mv "$TMP" "$WORKER_DIR/compute-worker"
+
+cat > "$WORKER_DIR/worker.env" <<EOF
+CONTROL_PLANE_URL=$CONTROL_PLANE_URL
+WORKER_STATE_DIR=$WORKER_DIR
+EOF
+chmod 600 "$WORKER_DIR/worker.env"
+
+if [[ "$OS" == "darwin" ]]; then
+  mkdir -p "$HOME/Library/LaunchAgents"
+  PLIST="$HOME/Library/LaunchAgents/com.smg99.compute-worker.plist"
+  cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.smg99.compute-worker</string>
+<key>ProgramArguments</key><array><string>$WORKER_DIR/compute-worker</string></array>
+<key>EnvironmentVariables</key><dict><key>CONTROL_PLANE_URL</key><string>$CONTROL_PLANE_URL</string><key>WORKER_STATE_DIR</key><string>$WORKER_DIR</string></dict>
+<key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
+<key>StandardOutPath</key><string>$WORKER_DIR/worker.log</string>
+<key>StandardErrorPath</key><string>$WORKER_DIR/worker.err.log</string>
+</dict></plist>
+EOF
+  launchctl bootout "gui/$(id -u)/com.smg99.compute-worker" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$PLIST"
+else
+  mkdir -p "$HOME/.config/systemd/user"
+  cat > "$HOME/.config/systemd/user/compute-worker.service" <<EOF
+[Unit]
+Description=Compute Worker
+After=network-online.target
+
+[Service]
+ExecStart=$WORKER_DIR/compute-worker
+Environment=CONTROL_PLANE_URL=$CONTROL_PLANE_URL
+Environment=WORKER_STATE_DIR=$WORKER_DIR
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+  systemctl --user daemon-reload
+  systemctl --user enable --now compute-worker.service
 fi
 
-echo "worker.js installed to $WORKER_DIR"
-
-# Create a simple launcher script in the same directory
-cat > "$WORKER_DIR/compute-worker" <<'EOF'
-#!/usr/bin/env bash
-exec node "$(dirname "$0")/worker.js" "$@"
-EOF
-chmod +x "$WORKER_DIR/compute-worker"
-
-# Platform‑specific daemon/agent installation
-echo "Logs are available at $WORKER_DIR/worker.log"
-echo "You can control the daemon with launchctl (macOS) or systemctl --user (Linux)."
+echo "Compute Worker $RELEASE_VERSION installed at $WORKER_DIR/compute-worker"
+echo "The daemon starts automatically, but compute remains disabled until local consent and a product compute request are both present."

@@ -7,6 +7,7 @@ export interface PersistedState {
   user_consent: boolean;
   is_compute_requested: boolean;
   last_known_config?: any;
+  control_plane_token?: string;
 }
 
 export class WorkerState {
@@ -69,6 +70,15 @@ export class WorkerState {
 
   public setComputeRequested(requested: boolean) {
     this.state.is_compute_requested = requested;
+    this.saveState();
+  }
+
+  public get controlPlaneToken(): string | null {
+    return this.state.control_plane_token || null;
+  }
+
+  public setControlPlaneToken(token: string) {
+    this.state.control_plane_token = token;
     this.saveState();
   }
 

@@ -56,8 +56,13 @@ async function runSmokeTest() {
     let body = '';
     req.on('data', chunk => body += chunk.toString());
     req.on('end', () => {
-       if (req.url === '/functions/v1/worker-config' && req.method === 'POST') {
-           const token = jwt.sign(mockControlPlaneConfig, 'test-secret');
+       if (req.url === '/functions/v1/worker-register' && req.method === 'POST') {
+           res.writeHead(200, { 'Content-Type': 'application/json' });
+           res.end(JSON.stringify({ worker_token: 'standalone-worker-token', registered: true }));
+       } else if (req.url === '/functions/v1/worker-config' && req.method === 'POST') {
+           const workerToken = (req.headers.authorization || '').replace(/^Bearer /, '');
+           if (!workerToken) { res.writeHead(401); res.end(); return; }
+           const token = jwt.sign(mockControlPlaneConfig, workerToken);
            res.writeHead(200, { 'Content-Type': 'application/json' });
            res.end(JSON.stringify({ token }));
        } else if (req.url === '/functions/v1/worker-telemetry' && req.method === 'POST') {
@@ -74,15 +79,17 @@ async function runSmokeTest() {
   const env = { 
     ...process.env, 
     CONTROL_PLANE_URL: 'http://127.0.0.1:34568',
-    WORKER_JWT_SECRET: 'test-secret'
+    WORKER_STATE_DIR: stateDir,
+    WORKER_PORT: '34669',
+    POLL_INTERVAL_MS: '1000'
   };
 
   let workerProcess = spawn('npx', ['tsx', 'src/index.ts'], { cwd: path.join(__dirname, '..'), env });
   
   await wait(2000); // let API start
   const token = await getAuthToken();
-  const client = new ComputeWorkerClient('test', token);
-  const rto = new RtoComputeAdapter(token);
+  const client = new ComputeWorkerClient('test', token, 'http://127.0.0.1:34669');
+  const rto = new RtoComputeAdapter(token, 'http://127.0.0.1:34669');
 
   try {
     console.log('1. Verify initial state is SAFE/DISABLED');
@@ -146,7 +153,7 @@ async function runSmokeTest() {
     workerProcess = spawn('npx', ['tsx', 'src/index.ts'], { cwd: path.join(__dirname, '..'), env });
     await wait(2000);
 
-    console.log('10. Verify restart begins in safe state due to kill switch still present in last config');
+    console.log('10. Verify restart begins in safe state (compute request is reset on cold boot)');
     status = await client.status();
     assert(status?.workload_state === 'stopped', 'Expected stopped on restart', status);
 

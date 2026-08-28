@@ -99,9 +99,11 @@ export class Heartbeat {
          events: events
       };
 
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (this.state.controlPlaneToken) headers.Authorization = `Bearer ${this.state.controlPlaneToken}`;
       const response = await fetch(`${this.controlPlaneUrl}/functions/v1/worker-telemetry`, {
          method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
+         headers,
          body: JSON.stringify(reqPayload)
       });
 

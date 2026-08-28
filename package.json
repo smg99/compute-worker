@@ -1,12 +1,13 @@
 {
   "name": "compute-worker",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "node scripts/build.js"
+    "build": "node scripts/build.js",
+    "build:standalone": "npm run build && node scripts/build-standalone.js"
   },
   "keywords": [],
   "author": "",

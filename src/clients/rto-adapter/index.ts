@@ -6,8 +6,8 @@ import { ComputeWorkerClient, ComputeWorkerStatus } from '../browser';
 export class RtoComputeAdapter {
   private client: ComputeWorkerClient;
 
-  constructor(authToken: string) {
-    this.client = new ComputeWorkerClient('rto-slot-booking', authToken);
+  constructor(authToken: string, apiUrl?: string) {
+    this.client = new ComputeWorkerClient('rto-slot-booking', authToken, apiUrl);
   }
 
   public async getWorkerStatus(): Promise<ComputeWorkerStatus | null> {
@@ -21,7 +21,7 @@ export class RtoComputeAdapter {
       return false;
     }
 
-    if (!status.consent || !status.compute_enabled) {
+    if (!status.consent || status.state !== 'WORKLOAD_RUNNING' && status.state !== 'AUTHORIZED') {
       return false;
     }
 
