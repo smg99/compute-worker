@@ -17,6 +17,8 @@ export class WorkloadProcessProvider implements WorkloadProvider {
   private child: ChildProcess | null = null;
   private nextId = 1;
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+  private intentionalShutdown = false;
+  private exitHandler: ((error: Error) => void) | null = null;
 
   constructor(private readonly providerId: string, metadata: WorkloadProvider) {
     this.id = metadata.id;
@@ -28,6 +30,8 @@ export class WorkloadProcessProvider implements WorkloadProvider {
     this.supported_platforms = metadata.supported_platforms;
     if (this.id !== providerId) throw new Error(`Provider id mismatch: ${providerId}`);
   }
+
+  public onUnexpectedExit(handler: (error: Error) => void): void { this.exitHandler = handler; }
 
   public get processId(): number | null {
     return this.child?.pid ?? null;
@@ -47,11 +51,13 @@ export class WorkloadProcessProvider implements WorkloadProvider {
   public async resume(): Promise<void> { await this.call('resume'); }
   public async stop(): Promise<void> {
     if (!this.child) return;
+    this.intentionalShutdown = true;
     try { await this.call('stop'); } finally { await this.shutdownProcess(); }
   }
 
   public async shutdown(): Promise<void> {
     if (!this.child) return;
+    this.intentionalShutdown = true;
     try { await this.call('shutdown'); } catch { /* child may already be exiting */ }
     await this.shutdownProcess();
   }
@@ -72,14 +78,18 @@ export class WorkloadProcessProvider implements WorkloadProvider {
       stdio: ['ignore', 'pipe', 'pipe', 'ipc']
     });
     this.child = child;
+    this.intentionalShutdown = false;
     child.stdout?.on('data', data => console.log(`[Workload:${this.id}] ${data}`));
     child.stderr?.on('data', data => console.error(`[Workload:${this.id}] ${data}`));
     child.on('message', (message: RpcResponse) => this.handleResponse(message));
     child.on('exit', (code, signal) => {
       const error = new Error(`Workload process exited (code=${code}, signal=${signal})`);
+      const unexpected = !this.intentionalShutdown;
       for (const { reject } of this.pending.values()) reject(error);
       this.pending.clear();
       if (this.child === child) this.child = null;
+      if (unexpected) this.exitHandler?.(error);
+      this.intentionalShutdown = false;
     });
     await new Promise<void>((resolve, reject) => {
       const onMessage = (message: any) => {

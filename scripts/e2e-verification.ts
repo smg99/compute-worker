@@ -93,7 +93,19 @@ async function runTests() {
      throw new Error('Workload failed to start when all conditions met');
   }
 
-  // Test 5: Phase 7 - Consent Matrix (Kill Switch Activated)
+  // Test 5: Phase 1C - Workload Crash Recovery
+  console.log('[Phase 1C] Testing Workload Crash Recovery');
+  const crashedPid = status.workload_process_id;
+  if (!crashedPid) throw new Error('Missing workload PID before crash test');
+  process.kill(crashedPid, 'SIGKILL');
+  status = await waitForStatus(s => s.workload_state === 'running' && s.workload_process_id && s.workload_process_id !== crashedPid, 10000);
+  if (status.workload_state === 'running' && status.workload_process_id && status.workload_process_id !== crashedPid) {
+    console.log(`  PASS: Workload restarted after crash (PID ${crashedPid} -> ${status.workload_process_id})`);
+  } else {
+    throw new Error(`Workload failed to recover after crash (PID ${crashedPid})`);
+  }
+
+  // Test 6: Phase 7 - Consent Matrix (Kill Switch Activated)
   console.log('[Phase 7] Testing Consent Matrix: Remote Kill Switch');
   mockConfig.kill_switch = true;
   status = await waitForStatus(s => s.state === 'SAFE/DISABLED', 5000);
@@ -103,7 +115,7 @@ async function runTests() {
      throw new Error(`Kill switch failed to stop workload (State: ${status.state})`);
   }
   
-  // Test 6: Phase 7 - Consent Matrix (Remote Auth Disabled)
+  // Test 7: Phase 7 - Consent Matrix (Remote Auth Disabled)
   console.log('[Phase 7] Testing Consent Matrix: Remote Auth Revoked');
   mockConfig.kill_switch = false;
   mockConfig.worker_enabled = false;
@@ -119,7 +131,7 @@ async function runTests() {
   await fetch(`${DAEMON_URL}/consent/disable`, { method: 'POST', headers: { 'Authorization': `Bearer ${validToken}` }});
   await fetch(`${DAEMON_URL}/consent/enable`, { method: 'POST', headers: { 'Authorization': `Bearer ${validToken}` }});
 
-  // Test 7: Phase 4 & 5 - Task Execution & Telemetry Proxy
+  // Test 8: Phase 4 & 5 - Task Execution & Telemetry Proxy
   console.log('\n[Phase 4] Testing OCR Task Execution');
   mockConfig.worker_enabled = true;
   mockConfig.active_workload = 'ocr-compute';

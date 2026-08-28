@@ -18,6 +18,11 @@ export class WorkerRuntime {
   private heartbeat: Heartbeat;
   private resourceManager: ResourceManager;
   private readonly version: string;
+  private workloadConfig: RemoteConfigurationResponse | null = null;
+  private restartHistory: number[] = [];
+  private restartTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly maxRestarts = 3;
+  private readonly restartWindowMs = 60_000;
 
   constructor(
     public readonly state: WorkerState,
@@ -68,6 +73,7 @@ export class WorkerRuntime {
 
   private async onRemoteConfigReceived(config: RemoteConfigurationResponse) {
     // 1. Re-evaluate authorization state
+    this.workloadConfig = config;
     const isAuthorized = this.security.isComputeAuthorized(config, this.version);
 
     if (!isAuthorized) {
@@ -110,6 +116,9 @@ export class WorkerRuntime {
         version: config.configuration_version,
         max_cpu_percent: config.max_cpu_percent
       });
+      if (provider instanceof WorkloadProcessProvider) {
+        provider.onUnexpectedExit((error) => this.handleWorkloadCrash(provider, error));
+      }
       this.resourceManager.startMonitoring(provider, async () => {
         await this.stopActiveWorkload();
       }, provider instanceof WorkloadProcessProvider ? provider.processId ?? undefined : undefined);
@@ -123,6 +132,7 @@ export class WorkerRuntime {
   }
 
   private async stopActiveWorkload() {
+    if (this.restartTimer) { clearTimeout(this.restartTimer); this.restartTimer = null; }
     this.resourceManager.stopMonitoring();
     const provider = this.activeProvider;
     if (!provider) return;
@@ -137,6 +147,33 @@ export class WorkerRuntime {
     } catch (e) {
       console.error(`[WorkerRuntime] Error stopping workload ${id}`, e);
     }
+  }
+
+
+  private handleWorkloadCrash(provider: WorkloadProvider, error: Error): void {
+    if (this.activeProvider !== provider) return;
+    this.activeProvider = null;
+    this.resourceManager.stopMonitoring();
+    this.heartbeat.trackEvent('WORKLOAD_CRASHED', provider.id);
+    console.error(`[WorkerRuntime] Workload ${provider.id} crashed: ${error.message}`);
+
+    const config = this.workloadConfig;
+    if (!config || !this.security.isComputeAuthorized(config, this.version)) return;
+    const now = Date.now();
+    this.restartHistory = this.restartHistory.filter(ts => now - ts < this.restartWindowMs);
+    if (this.restartHistory.length >= this.maxRestarts) {
+      console.error(`[WorkerRuntime] Restart limit reached for ${provider.id}; entering SAFE/DISABLED.`);
+      this.heartbeat.trackEvent('ERROR', `Restart limit reached: ${provider.id}`);
+      return;
+    }
+    const attempt = this.restartHistory.length;
+    const delayMs = Math.min(30_000, 1_000 * 2 ** attempt);
+    this.restartHistory.push(now);
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = null;
+      if (this.workloadConfig !== config || !this.security.isComputeAuthorized(config, this.version)) return;
+      void this.startWorkload(provider, config);
+    }, delayMs);
   }
 
   // Used by Local API
