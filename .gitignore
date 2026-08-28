@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+# dist/ is intentionally tracked for the initial Phase 0 release workflow.
+
+# Local worker state / secrets
+.worker-data/
+.compute-worker/
+auth.key
+worker-state.json
+*.key
+
+# Environment / credentials
+.env
+.env.*
+!.env.example
+
+# Logs / runtime output
+*.log
+
+# macOS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Coverage / test output
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
