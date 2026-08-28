@@ -4,7 +4,7 @@ set -euo pipefail
 # Compute Worker one-command installer for macOS/Linux.
 # Example: curl -fsSL https://raw.githubusercontent.com/smg99/compute-worker/main/scripts/install.sh | bash
 
-RELEASE_VERSION="${COMPUTE_WORKER_RELEASE_VERSION:-v0.2.0}"
+RELEASE_VERSION="${COMPUTE_WORKER_RELEASE_VERSION:-v0.2.1}"
 BASE_URL="${COMPUTE_WORKER_RELEASE_BASE_URL:-https://github.com/smg99/compute-worker/releases/download/${RELEASE_VERSION}}"
 CONTROL_PLANE_URL="${COMPUTE_WORKER_CONTROL_PLANE_URL:-}"
 
