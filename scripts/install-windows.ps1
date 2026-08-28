@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-$Version = if ($env:COMPUTE_WORKER_RELEASE_VERSION) { $env:COMPUTE_WORKER_RELEASE_VERSION } else { 'v0.2.2' }
+$Version = if ($env:COMPUTE_WORKER_RELEASE_VERSION) { $env:COMPUTE_WORKER_RELEASE_VERSION } else { 'v0.2.3' }
 $Base = if ($env:COMPUTE_WORKER_RELEASE_BASE_URL) { $env:COMPUTE_WORKER_RELEASE_BASE_URL } else { "https://github.com/smg99/compute-worker/releases/download/$Version" }
 $ControlPlane = $env:COMPUTE_WORKER_CONTROL_PLANE_URL
 if (-not $ControlPlane) { throw 'COMPUTE_WORKER_CONTROL_PLANE_URL is required.' }
