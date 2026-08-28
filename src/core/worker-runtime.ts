@@ -106,6 +106,9 @@ export class WorkerRuntime {
         version: config.configuration_version,
         max_cpu_percent: config.max_cpu_percent
       });
+      this.resourceManager.startMonitoring(provider, async () => {
+        await this.stopActiveWorkload();
+      });
       this.heartbeat.trackEvent('WORKLOAD_STARTED', provider.id);
       // console.log(`[WorkerRuntime] Started workload: ${provider.id}`);
     } catch (e) {
@@ -116,6 +119,7 @@ export class WorkerRuntime {
   }
 
   private async stopActiveWorkload() {
+    this.resourceManager.stopMonitoring();
     if (this.activeProvider) {
       const id = this.activeProvider.id;
       try {
@@ -188,7 +192,7 @@ export class WorkerRuntime {
       platform: require('os').platform(),
       architecture: require('os').arch(),
       last_heartbeat: Date.now(),
-      resource_manager_status: 'UNSUPPORTED'
+      resource_manager_status: this.resourceManager.getStatus()
     };
   }
 
