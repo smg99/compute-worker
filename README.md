@@ -4,7 +4,7 @@ Reusable local execution infrastructure for products that need authorized local 
 
 ## Current release
 
-`v0.2.0` is the Phase 2 foundation: authenticated worker enrollment, remote policy retrieval, signed/expiring policy tokens, authenticated telemetry, standalone executables, supervised workload processes, and a private fleet dashboard.
+`v0.2.4` is the current Phase 2 release: authenticated worker enrollment, remote policy retrieval, signed/expiring policy tokens, authenticated telemetry, standalone executables, supervised workload processes, resource enforcement, and a private fleet dashboard.
 
 ## Safety model
 
