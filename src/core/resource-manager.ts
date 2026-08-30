@@ -74,10 +74,12 @@ export class ResourceManager {
 
   public startMonitoring(
     provider: WorkloadProvider,
-    onResourceViolation: () => Promise<void>
+    onResourceViolation: () => Promise<void>,
+    monitoredPid?: number
   ): ResourceManagerStatus {
     this.provider = provider;
     this.onResourceViolation = onResourceViolation;
+    this.monitoredPid = monitoredPid ?? process.pid;
 
     if (this._status !== 'ENFORCED') return this._status;
 
@@ -155,8 +157,8 @@ export class ResourceManager {
       throw new Error(`Unexpected ps output: ${stdout.trim()}`);
     }
     return {
-      cpu_percent: values[0],
-      memory_mb: values[1] / 1024,
+      cpu_percent: values[0]!,
+      memory_mb: values[1]! / 1024,
     };
   }
 }

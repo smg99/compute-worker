@@ -82,6 +82,25 @@ describe('Security', () => {
     ).toBe(true);
   });
 
+  it('compares dotted versions numerically instead of lexicographically', () => {
+    state.setConsent(true);
+    state.setComputeRequested(true);
+    expect(
+      security.isComputeAuthorized(makeConfig({ minimum_worker_version: '1.10.0' }), '1.9.0')
+    ).toBe(false);
+    expect(
+      security.isComputeAuthorized(makeConfig({ minimum_worker_version: '1.9.0' }), '1.10.0')
+    ).toBe(true);
+  });
+
+  it('rejects malformed minimum versions safely', () => {
+    state.setConsent(true);
+    state.setComputeRequested(true);
+    expect(
+      security.isComputeAuthorized(makeConfig({ minimum_worker_version: 'latest' }), '1.0.0')
+    ).toBe(false);
+  });
+
   it('rejects when active_workload is not in allowed_workloads', () => {
     state.setConsent(true);
     state.setComputeRequested(true);

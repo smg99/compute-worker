@@ -92,8 +92,9 @@ export class ConfigPoller {
 
     } catch (error) {
       console.error('Config poller failed, falling back to safe disabled defaults', error);
-      // Safe default on failure
-      this.onConfigUpdate({
+      // Safe default on failure. Persist it so status cannot report stale
+      // remote authorization after an expired/unreachable policy.
+      const safeConfig: RemoteConfigurationResponse = {
         worker_enabled: false,
         allowed_workloads: [],
         active_workload: null,
@@ -102,8 +103,10 @@ export class ConfigPoller {
         heartbeat_interval_seconds: 60,
         configuration_version: '0.0.0',
         minimum_worker_version: null,
-        kill_switch: true // fail closed
-      });
+        kill_switch: true
+      };
+      this.state.setLastKnownConfig(safeConfig);
+      this.onConfigUpdate(safeConfig);
     }
   }
 }

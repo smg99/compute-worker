@@ -37,7 +37,7 @@ const runtime = new WorkerRuntime(
   state,
   process.env.CONTROL_PLANE_URL || 'https://api.mock-control-plane.com',
   'generic-worker', // root worker
-  process.env.WORKER_VERSION || '1.0.0'
+  process.env.WORKER_VERSION || '0.2.3'
 );
 
 // 3. Register Providers
