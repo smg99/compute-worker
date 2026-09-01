@@ -26,8 +26,10 @@ if (fs.existsSync(AUTH_KEY_PATH)) {
   localAuthToken = fs.readFileSync(AUTH_KEY_PATH, 'utf8').trim();
 } else {
   localAuthToken = randomUUID();
-  fs.writeFileSync(AUTH_KEY_PATH, localAuthToken, 'utf8');
+  fs.writeFileSync(AUTH_KEY_PATH, localAuthToken, { encoding: 'utf8', mode: 0o600 });
 }
+// The token is a local authentication credential; keep it owner-readable only.
+try { fs.chmodSync(AUTH_KEY_PATH, 0o600); } catch { /* Windows may not support POSIX modes. */ }
 
 // 1. Initialize State
 const state = new WorkerState(STATE_DIR);
@@ -37,7 +39,7 @@ const runtime = new WorkerRuntime(
   state,
   process.env.CONTROL_PLANE_URL || 'https://api.mock-control-plane.com',
   'generic-worker', // root worker
-  process.env.WORKER_VERSION || '0.2.3'
+  process.env.WORKER_VERSION || '0.2.4'
 );
 
 // 3. Register Providers
