@@ -17,6 +17,7 @@ export class WorkerState {
   constructor(stateDir: string) {
     this.stateFilePath = path.join(stateDir, 'worker-state.json');
     this.state = this.loadState();
+    this.restrictStateFilePermissions();
   }
 
   private loadState(): PersistedState {
@@ -44,10 +45,21 @@ export class WorkerState {
 
   private saveState() {
     try {
-      fs.mkdirSync(path.dirname(this.stateFilePath), { recursive: true });
-      fs.writeFileSync(this.stateFilePath, JSON.stringify(this.state, null, 2), 'utf8');
+      fs.mkdirSync(path.dirname(this.stateFilePath), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(this.stateFilePath, JSON.stringify(this.state, null, 2), { encoding: 'utf8', mode: 0o600 });
+      this.restrictStateFilePermissions();
     } catch (e) {
       console.error('Failed to save worker state', e);
+    }
+  }
+
+  private restrictStateFilePermissions() {
+    try {
+      // State contains the control-plane token, so it must not be group/world-readable.
+      fs.chmodSync(this.stateFilePath, 0o600);
+      fs.chmodSync(path.dirname(this.stateFilePath), 0o700);
+    } catch {
+      // Windows does not provide POSIX file modes; ACL-based protection is platform-specific.
     }
   }
 
