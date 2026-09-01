@@ -15,7 +15,7 @@ let mockControlPlaneConfig = {
     max_memory_mb: 512,
     heartbeat_interval_seconds: 1,
     configuration_version: '1.0.0',
-    minimum_worker_version: '1.0.0',
+    minimum_worker_version: '0.2.4',
     kill_switch: false
 };
 
@@ -85,6 +85,8 @@ async function runSmokeTest() {
   };
 
   let workerProcess = spawn('npx', ['tsx', 'src/index.ts'], { cwd: path.join(__dirname, '..'), env });
+  workerProcess.stdout?.on('data', data => process.stdout.write(`[WORKER] ${data}`));
+  workerProcess.stderr?.on('data', data => process.stderr.write(`[WORKER-ERR] ${data}`));
   
   await wait(2000); // let API start
   const token = await getAuthToken();
@@ -111,9 +113,11 @@ async function runSmokeTest() {
 
     console.log('4. Authorize test-compute and Start/request it');
     await client.startWorker(); // This sets compute_requested = true
-    await wait(500); // Let polling cycle or immediate reaction hit
-    
-    status = await client.status();
+    const runningDeadline = Date.now() + 5000;
+    do {
+      await wait(100);
+      status = await client.status();
+    } while (status?.workload_state !== 'running' && Date.now() < runningDeadline);
     assert(status?.workload_state === 'running', `Expected workload to be running`, status);
     assert(status?.state === 'WORKLOAD_RUNNING', 'Expected WORKLOAD_RUNNING state', status);
 
@@ -151,6 +155,8 @@ async function runSmokeTest() {
 
     console.log('9. Restart the worker');
     workerProcess = spawn('npx', ['tsx', 'src/index.ts'], { cwd: path.join(__dirname, '..'), env });
+    workerProcess.stdout?.on('data', data => process.stdout.write(`[WORKER] ${data}`));
+    workerProcess.stderr?.on('data', data => process.stderr.write(`[WORKER-ERR] ${data}`));
     await wait(2000);
 
     console.log('10. Verify restart begins in safe state (compute request is reset on cold boot)');

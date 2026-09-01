@@ -34,8 +34,17 @@ chmod 600 "$AUTH_FILE"
 
 TMP="$WORKER_DIR/worker.tmp"
 URL="$BASE_URL/$ARTIFACT"
+CHECKSUMS="$WORKER_DIR/SHA256SUMS"
+echo "Downloading checksum manifest..."
+curl --proto '=https' --tlsv1.2 -fL --retry 3 --retry-delay 1 "$BASE_URL/SHA256SUMS" -o "$CHECKSUMS.tmp"
+mv "$CHECKSUMS.tmp" "$CHECKSUMS"
 echo "Downloading $ARTIFACT from $URL ..."
 curl --proto '=https' --tlsv1.2 -fL --retry 3 --retry-delay 1 "$URL" -o "$TMP"
+EXPECTED="$(awk -v file="$ARTIFACT" '$2 == file {print $1}' "$CHECKSUMS")"
+[[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "Error: no valid checksum for $ARTIFACT"; rm -f "$TMP"; exit 1; }
+if command -v sha256sum >/dev/null 2>&1; then ACTUAL="$(sha256sum "$TMP" | awk '{print $1}')"; else ACTUAL="$(shasum -a 256 "$TMP" | awk '{print $1}')"; fi
+[[ "$ACTUAL" == "$EXPECTED" ]] || { echo "Error: checksum verification failed"; rm -f "$TMP"; exit 1; }
+echo "Checksum verified for $ARTIFACT."
 chmod 755 "$TMP"
 mv "$TMP" "$WORKER_DIR/compute-worker"
 

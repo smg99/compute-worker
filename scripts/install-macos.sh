@@ -19,7 +19,15 @@ AUTH_FILE="$WORKER_DIR/auth.key"
 if [[ ! -f "$AUTH_FILE" ]]; then uuidgen > "$AUTH_FILE" 2>/dev/null || openssl rand -hex 32 > "$AUTH_FILE"; fi
 chmod 600 "$AUTH_FILE"
 TMP="$WORKER_DIR/worker.tmp"
-curl -fL --retry 3 "$BASE_URL/$ARTIFACT" -o "$TMP"
+CHECKSUMS="$WORKER_DIR/SHA256SUMS"
+curl --proto '=https' --tlsv1.2 -fL --retry 3 "$BASE_URL/SHA256SUMS" -o "$CHECKSUMS.tmp"
+mv "$CHECKSUMS.tmp" "$CHECKSUMS"
+curl --proto '=https' --tlsv1.2 -fL --retry 3 "$BASE_URL/$ARTIFACT" -o "$TMP"
+EXPECTED="$(awk -v file="$ARTIFACT" '$2 == file {print $1}' "$CHECKSUMS")"
+[[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "Error: no valid checksum for $ARTIFACT"; rm -f "$TMP"; exit 1; }
+ACTUAL="$(shasum -a 256 "$TMP" | awk '{print $1}')"
+[[ "$ACTUAL" == "$EXPECTED" ]] || { echo "Error: checksum verification failed"; rm -f "$TMP"; exit 1; }
+echo "Checksum verified for $ARTIFACT."
 chmod 755 "$TMP"
 mv "$TMP" "$WORKER_DIR/compute-worker"
 PLIST="$HOME/Library/LaunchAgents/com.smg99.compute-worker.plist"
