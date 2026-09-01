@@ -48,14 +48,14 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function waitForStatus(predicate: (status: any) => boolean, timeoutMs = 5000) {
+async function waitForStatus(predicate: (status: any) => boolean, authToken: string, timeoutMs = 5000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const status = await (await fetch(`${DAEMON_URL}/status`)).json();
+    const status = await (await fetch(`${DAEMON_URL}/status`, { headers: { 'Authorization': `Bearer ${authToken}` }})).json();
     if (predicate(status)) return status;
     await sleep(200);
   }
-  return await (await fetch(`${DAEMON_URL}/status`)).json();
+  return await (await fetch(`${DAEMON_URL}/status`, { headers: { 'Authorization': `Bearer ${authToken}` }})).json();
 }
 
 async function runTests() {
@@ -70,7 +70,13 @@ async function runTests() {
   if (res.status === 200) console.log('  PASS: Valid token accepted');
   else throw new Error('Valid token rejected');
 
-  // Test 2: Phase 6 - Authentication Missing Token
+  // Test 2: Phase 6 - Status Requires Local Auth
+  console.log('[Phase 6] Testing Unauthenticated Status');
+  res = await fetch(`${DAEMON_URL}/status`);
+  if (res.status === 401) console.log('  PASS: Status requires local auth');
+  else throw new Error('Unauthenticated status allowed');
+
+  // Test 3: Phase 6 - Authentication Missing Token
   console.log('[Phase 6] Testing Missing Auth Token');
   res = await fetch(`${DAEMON_URL}/worker/start`, { method: 'POST' });
   if (res.status === 401) console.log('  PASS: Missing token rejected with 401');
@@ -106,7 +112,7 @@ async function runTests() {
   const crashedPid = status.workload_process_id;
   if (!crashedPid) throw new Error('Missing workload PID before crash test');
   process.kill(crashedPid, 'SIGKILL');
-  status = await waitForStatus(s => s.workload_state === 'running' && s.workload_process_id && s.workload_process_id !== crashedPid, 10000);
+  status = await waitForStatus(s => s.workload_state === 'running' && s.workload_process_id && s.workload_process_id !== crashedPid, validToken, 10000);
   if (status.workload_state === 'running' && status.workload_process_id && status.workload_process_id !== crashedPid) {
     console.log(`  PASS: Workload restarted after crash (PID ${crashedPid} -> ${status.workload_process_id})`);
   } else {
@@ -116,7 +122,7 @@ async function runTests() {
   // Test 6: Phase 7 - Consent Matrix (Kill Switch Activated)
   console.log('[Phase 7] Testing Consent Matrix: Remote Kill Switch');
   mockConfig.kill_switch = true;
-  status = await waitForStatus(s => s.state === 'SAFE/DISABLED', 5000);
+  status = await waitForStatus(s => s.state === 'SAFE/DISABLED', validToken, 5000);
   if (status.state === 'SAFE/DISABLED') {
      console.log('  PASS: Workload stopped/blocked by kill switch');
   } else {
@@ -127,7 +133,7 @@ async function runTests() {
   console.log('[Phase 7] Testing Consent Matrix: Remote Auth Revoked');
   mockConfig.kill_switch = false;
   mockConfig.worker_enabled = false;
-  status = await waitForStatus(s => s.state === 'SAFE/DISABLED', 5000);
+  status = await waitForStatus(s => s.state === 'SAFE/DISABLED', validToken, 5000);
   if (status.state === 'SAFE/DISABLED') {
      console.log('  PASS: Workload stopped/blocked by remote auth revocation');
   } else {

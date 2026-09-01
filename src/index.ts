@@ -14,6 +14,7 @@ if (process.env.COMPUTE_WORKER_CHILD === '1') {
 } else {
 
 const PORT = parseInt(process.env.WORKER_PORT || '34567', 10);
+const MAX_BODY_BYTES = 1_048_576;
 const STATE_DIR = process.env.WORKER_STATE_DIR || path.join(require('os').homedir(), '.compute-worker');
 
 // Ensure state dir exists
@@ -73,8 +74,9 @@ const server = http.createServer((req, res) => {
   const authHeader = req.headers['authorization'];
   const validToken = `Bearer ${localAuthToken}`;
   
-  // All endpoints EXCEPT /health and /status are protected
-  if (req.url && req.url !== '/health' && req.url !== '/status') {
+  // Health is intentionally public for installation/availability detection.
+  // Every other endpoint requires the local auth token, including status.
+  if (req.url !== '/health') {
     if (authHeader !== validToken) {
        res.writeHead(401);
        res.end('Unauthorized');
@@ -130,9 +132,20 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'POST' && req.url === '/workload/execute') {
     let body = '';
-    req.on('data', chunk => body += chunk.toString());
+    let bodyBytes = 0;
+    let tooLarge = false;
+    req.on('data', chunk => {
+      bodyBytes += chunk.length;
+      if (bodyBytes <= MAX_BODY_BYTES) body += chunk.toString();
+      else tooLarge = true;
+    });
     req.on('end', async () => {
       try {
+        if (tooLarge) {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Payload too large' }));
+          return;
+        }
         const payload = JSON.parse(body);
         const result = await runtime.executeTask(payload);
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -147,9 +160,20 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'POST' && req.url === '/telemetry/event') {
     let body = '';
-    req.on('data', chunk => body += chunk.toString());
+    let bodyBytes = 0;
+    let tooLarge = false;
+    req.on('data', chunk => {
+      bodyBytes += chunk.length;
+      if (bodyBytes <= MAX_BODY_BYTES) body += chunk.toString();
+      else tooLarge = true;
+    });
     req.on('end', () => {
       try {
+        if (tooLarge) {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Payload too large' }));
+          return;
+        }
         const payload = JSON.parse(body);
         runtime.trackTelemetryEvent(payload.type || 'PRODUCT_EVENT', payload.details);
         res.writeHead(200, { 'Content-Type': 'application/json' });
